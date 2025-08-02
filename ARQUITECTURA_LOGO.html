@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SafeUPP | Sensor de Apertura de Puerta</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Poppins&display=swap');
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Poppins', sans-serif;
+      background-color: #f5f5f5;
+      color: #333;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    header {
+      background-color: #4B0082;
+      color: white;
+      padding: 40px 20px;
+      text-align: center;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+    }
+
+    header img.logo {
+      width: 250px;
+      margin-bottom: 10px;
+    }
+
+    header h1 {
+      font-size: 2.8rem;
+      margin-bottom: 5px;
+    }
+
+    header p {
+      font-size: 1.2rem;
+      font-weight: 500;
+      letter-spacing: 0.05em;
+    }
+
+    main {
+      flex: 1;
+      padding: 40px 20px;
+      max-width: 700px;
+      margin: 0 auto;
+      background-color: white;
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(75, 0, 130, 0.15);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 25px;
+    }
+
+    h2 {
+      color: #4B0082;
+      font-weight: 700;
+      font-size: 2rem;
+      text-align: center;
+    }
+
+    #mensaje {
+      width: 100%;
+      padding: 20px;
+      border-radius: 12px;
+      font-size: 1.6rem;
+      font-weight: 600;
+      color: #222;
+      background-color: #eeeeee;
+      box-shadow: 0 0 10px #00aa00;
+      text-align: center;
+      transition: all 0.3s ease;
+      user-select: none;
+    }
+
+    #valor {
+      font-size: 1.3rem;
+      color: #4B0082;
+      font-weight: 600;
+    }
+
+    button#conectar {
+      background-color: #4B0082;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 15px 35px;
+      font-size: 1.2rem;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 6px 15px rgba(75, 0, 130, 0.4);
+      transition: background-color 0.3s ease;
+    }
+
+    button#conectar:hover {
+      background-color: #35005c;
+    }
+
+    /* Alerta cuando entra luz */
+    .alerta-roja {
+      background-color: #ffdddd !important;
+      box-shadow: 0 0 20px #ff0000 !important;
+      color: #a10000 !important;
+    }
+
+    footer {
+      background-color: #eee;
+      text-align: center;
+      padding: 15px 10px;
+      font-size: 0.9rem;
+      color: #666;
+      margin-top: auto;
+      user-select: none;
+    }
+
+    /* Responsive */
+    @media (max-width: 480px) {
+      main {
+        max-width: 90%;
+        padding: 25px 15px;
+      }
+
+      header h1 {
+        font-size: 2rem;
+      }
+
+      h2 {
+        font-size: 1.6rem;
+      }
+
+      button#conectar {
+        width: 100%;
+        padding: 15px 0;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <img src="logo_safeupp.png" alt="Logo SafeUPP" class="logo" />
+    <h1>SafeUPP</h1>
+    <p>Sensor de Apertura de Puerta por Variación de Luz</p>
+  </header>
+
+  <main>
+    <h2>Monitoreo en Tiempo Real</h2>
+    <button id="conectar">Conectar al Arduino</button>
+    <div id="mensaje">Esperando datos...</div>
+    <div id="valor">Valor leído: --</div>
+  </main>
+
+  <footer>
+    © 2025 SafeUPP - Universidad Politécnica de Pachuca
+  </footer>
+
+  <script>
+    const boton = document.getElementById("conectar");
+    const mensaje = document.getElementById("mensaje");
+    const valorDiv = document.getElementById("valor");
+
+    if ("Notification" in window && Notification.permission !== "granted") {
+      Notification.requestPermission();
+    }
+
+    function mostrarNotificacion(titulo, cuerpo) {
+      if (Notification.permission === "granted") {
+        new Notification(titulo, {
+          body: cuerpo,
+          icon: "UPP.JPG"
+        });
+      }
+    }
+
+    boton.addEventListener("click", async () => {
+      try {
+        const puerto = await navigator.serial.requestPort();
+        await puerto.open({ baudRate: 9600 });
+
+        const textoDecoder = new TextDecoderStream();
+        await puerto.readable.pipeTo(textoDecoder.writable);
+        const lector = textoDecoder.readable.getReader();
+
+        let ultimaAlerta = false;
+
+        while (true) {
+          const { value, done } = await lector.read();
+          if (done) break;
+          if (value) {
+            const valor = parseInt(value.trim());
+            if (!isNaN(valor)) {
+              valorDiv.innerText = "Valor leído: " + valor;
+
+              if (valor > 400) {
+                mensaje.innerText = "¡ALERTA! Está entrando luz";
+                mensaje.classList.add("alerta-roja");
+                if (!ultimaAlerta) {
+                  mostrarNotificacion("Alerta de Luz", "¡Se ha detectado entrada de luz!");
+                  ultimaAlerta = true;
+                }
+              } else {
+                mensaje.innerText = "Caja cerrada - Sin luz";
+                mensaje.classList.remove("alerta-roja");
+                ultimaAlerta = false;
+              }
+            }
+          }
+        }
+      } catch (err) {
+        mensaje.innerText = "Error de conexión: " + err;
+        mensaje.style.color = "red";
+      }
+    });
+  </script>
+</body>
+
+</html>
